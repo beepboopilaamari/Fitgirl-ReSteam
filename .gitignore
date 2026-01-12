@@ -2,6 +2,7 @@ node_modules/
 dist/
 release/
 dist-release/
+build/
 *.log
 *.db
 *.db-shm
@@ -9,6 +10,8 @@ dist-release/
 .DS_Store
 Thumbs.db
 .env
-resources/games.db
+.env.local
+*.tmp
+*.temp
 downloads/
 cache/
