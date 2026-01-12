@@ -18,6 +18,7 @@ interface TorrentDownload {
   downloadedBytes: number;
   totalBytes: number;
   paused: boolean;
+  selectedFileIndices?: number[]; // Indices of selected files to download
   engine?: any; // torrent-stream engine
 }
 
@@ -27,6 +28,14 @@ export interface TorrentInfo {
   gameName: string;
   downloadPath: string;
   seedAfterComplete: boolean;
+  selectedFileIndices?: number[]; // Files to download (if undefined, all are selected)
+}
+
+export interface TorrentFile {
+  index: number;
+  name: string;
+  length: number;
+  isOptional: boolean;
 }
 
 export class TorrentManager extends EventEmitter {
@@ -47,6 +56,7 @@ export class TorrentManager extends EventEmitter {
       gameName: torrentInfo.gameName,
       downloadPath: torrentInfo.downloadPath,
       seedAfterComplete: torrentInfo.seedAfterComplete,
+      selectedFileIndices: torrentInfo.selectedFileIndices,
       status: 'queued',
       progress: 0,
       downloadSpeed: 0,
@@ -137,11 +147,38 @@ export class TorrentManager extends EventEmitter {
           downloadPath: actualPath
         });
         
-        // Select all files for download
-        engine.files.forEach((file: any) => {
-          log.info(`[TorrentManager] File: ${file.name} (${file.length} bytes)`);
-          file.select(); // Mark file for download
+        // Deselect everything first to avoid downloading unselected files by default
+        engine.files.forEach((file: any) => file.deselect());
+
+        // Calculate total size of selected files
+        let selectedFilesTotalBytes = 0;
+
+        // Select files for download and log the decision
+        engine.files.forEach((file: any, index: number) => {
+          let willSelect = false;
+
+          if (download.selectedFileIndices !== undefined) {
+            // Only select the files explicitly chosen by the user
+            willSelect = download.selectedFileIndices.includes(index);
+          } else {
+            // No selection provided: select all files (legacy behavior)
+            willSelect = true;
+          }
+
+          if (willSelect) {
+            file.select();
+            selectedFilesTotalBytes += file.length;
+          }
+
+          log.info(
+            `[TorrentManager] File ${index}: ${file.name} (${file.length} bytes) | selected=${willSelect}`
+          );
         });
+
+        // Update total bytes to only include selected files
+        download.totalBytes = selectedFilesTotalBytes;
+        log.info(`[TorrentManager] Total selected files size: ${(selectedFilesTotalBytes / 1024 / 1024).toFixed(2)} MB`);
+
 
         // Start monitoring progress
         this.monitorTorrentProgress(downloadId);
@@ -525,6 +562,38 @@ export class TorrentManager extends EventEmitter {
       log.error('[TorrentManager] Error finding installer:', error);
       return null;
     }
+  }
+
+  async getTorrentFiles(magnetLink: string): Promise<TorrentFile[]> {
+    return new Promise((resolve, reject) => {
+      const engine = torrentStream(magnetLink, {
+        connections: 100,
+        uploads: 10
+      });
+
+      engine.on('ready', () => {
+        const files: TorrentFile[] = engine.files.map((file: any, index: number) => ({
+          index,
+          name: file.name,
+          length: file.length,
+          isOptional: file.name.toLowerCase().includes('optional')
+        }));
+        
+        engine.destroy(() => {
+          resolve(files);
+        });
+      });
+
+      engine.on('error', (err: any) => {
+        reject(err);
+      });
+
+      setTimeout(() => {
+        engine.destroy(() => {
+          reject(new Error('Torrent file fetch timeout'));
+        });
+      }, 30000); // 30 second timeout
+    });
   }
 
   destroy(): void {

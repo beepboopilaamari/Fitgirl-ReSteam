@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, Card, Row, Col, Button, Input, Space, Tag, message, Spin, Pagination } from 'antd';
 import { DownloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { Game } from '../../shared/types';
+import FileSelectionModal from '../components/FileSelectionModal';
 
 const { Title } = Typography;
 const { Search } = Input;
@@ -13,6 +14,11 @@ const BrowseView: React.FC = () => {
   const [pageSize, setPageSize] = useState(24);
   const [totalGames, setTotalGames] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [fileSelectionVisible, setFileSelectionVisible] = useState(false);
+  const [torrentFiles, setTorrentFiles] = useState<any[]>([]);
+  const [fileFetching, setFileFetching] = useState(false);
+  const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
+  const [selectedGameTitle, setSelectedGameTitle] = useState('');
 
   useEffect(() => {
     loadTotalCount();
@@ -69,13 +75,60 @@ const BrowseView: React.FC = () => {
     }
   };
 
-  const handleDownload = async (gameId: number) => {
+  const handleDownload = async (gameId: number, gameTitle: string) => {
     try {
-      await window.electronAPI.startDownload(gameId);
+      const game = games.find(g => g.id === gameId);
+      if (!game || !game.magnet_link) {
+        message.error('Game magnet link not found');
+        return;
+      }
+
+      setSelectedGameId(gameId);
+      setSelectedGameTitle(gameTitle);
+      setFileFetching(true);
+
+      try {
+        const files = await window.electronAPI.getTorrentFiles(game.magnet_link);
+        setTorrentFiles(files);
+
+        // Check if there are optional files
+        const hasOptionalFiles = files.some((f: any) => f.isOptional);
+        
+        if (hasOptionalFiles) {
+          // Show modal for file selection
+          setFileSelectionVisible(true);
+        } else {
+          // No optional files, start download directly
+          await window.electronAPI.startDownload(gameId);
+          message.success('Download started!');
+        }
+      } catch (fileError) {
+        console.error('Error fetching torrent files:', fileError);
+        // Fallback: start download without file selection
+        await window.electronAPI.startDownload(gameId);
+        message.success('Download started!');
+      }
+    } catch (error) {
+      message.error('Failed to start download');
+    } finally {
+      setFileFetching(false);
+    }
+  };
+
+  const handleFileSelectionConfirm = async (selectedIndices: number[]) => {
+    if (!selectedGameId) return;
+
+    try {
+      setFileSelectionVisible(false);
+      await window.electronAPI.startDownload(selectedGameId, selectedIndices);
       message.success('Download started!');
     } catch (error) {
       message.error('Failed to start download');
     }
+  };
+
+  const handleFileSelectionCancel = () => {
+    setFileSelectionVisible(false);
   };
 
   const handlePageChange = (page: number, size?: number) => {
@@ -96,6 +149,14 @@ const BrowseView: React.FC = () => {
 
   return (
     <div className="page-shell">
+      <FileSelectionModal
+        visible={fileSelectionVisible}
+        files={torrentFiles}
+        loading={fileFetching}
+        gameName={selectedGameTitle}
+        onConfirm={handleFileSelectionConfirm}
+        onCancel={handleFileSelectionCancel}
+      />
       <div className="hero-bar">
         <div>
           <Title level={2} className="page-title">Browse Games</Title>
@@ -147,7 +208,7 @@ const BrowseView: React.FC = () => {
                 <Button
                   type="primary"
                   icon={<DownloadOutlined />}
-                  onClick={() => handleDownload(game.id)}
+                  onClick={() => handleDownload(game.id, game.title)}
                   disabled={!game.magnet_link}
                 >
                   Download

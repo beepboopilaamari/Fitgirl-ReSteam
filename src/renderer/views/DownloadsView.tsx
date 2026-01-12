@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Typography, Card, Button, Progress, Space, Empty, message, Modal, Tooltip } from 'antd';
-import { PauseOutlined, PlayCircleOutlined, DeleteOutlined, FolderOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { PauseOutlined, PlayCircleOutlined, DeleteOutlined, FolderOutlined, ArrowUpOutlined, ArrowDownOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useDownloads } from '../contexts/DownloadContext';
 import { DownloadStatus } from '../../shared/types';
 
@@ -38,6 +38,9 @@ const DownloadsView: React.FC = () => {
       content: 'This will remove all downloads from the list and cancel any active downloads. Your cached games will not be affected.',
       okText: 'Clear All',
       okType: 'danger',
+      cancelText: 'Cancel',
+      centered: true,
+      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
       onOk: async () => {
         try {
           await window.electronAPI.clearAllDownloads();
@@ -253,6 +256,16 @@ const DownloadsView: React.FC = () => {
                     </Paragraph>
                   </div>
                   <Space>
+                    {download.status === DownloadStatus.DOWNLOADING && (
+                      <Button icon={<PauseOutlined />} onClick={() => handlePause(download.id)}>
+                        Pause
+                      </Button>
+                    )}
+                    {download.status === DownloadStatus.PAUSED && (
+                      <Button icon={<PlayCircleOutlined />} onClick={() => handleResume(download.id)}>
+                        Resume
+                      </Button>
+                    )}
                     <Tooltip title="Increase Priority">
                       <Button 
                         size="small" 
@@ -268,16 +281,6 @@ const DownloadsView: React.FC = () => {
                         disabled={!download.priority || download.priority <= 0}
                       />
                     </Tooltip>
-                    {download.status === DownloadStatus.DOWNLOADING && (
-                      <Button icon={<PauseOutlined />} onClick={() => handlePause(download.id)}>
-                        Pause
-                      </Button>
-                    )}
-                    {download.status === DownloadStatus.PAUSED && (
-                      <Button icon={<PlayCircleOutlined />} onClick={() => handleResume(download.id)}>
-                        Resume
-                      </Button>
-                    )}
                     <Button icon={<DeleteOutlined />} 
                       onClick={() => handleCancel(download.id)}
                       loading={cancellingDownload === download.id}

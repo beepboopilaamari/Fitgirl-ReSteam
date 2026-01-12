@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, message } from 'antd';
-import { steamTheme } from './theme';
+import { generateTheme } from './theme';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { DownloadProvider } from './contexts/DownloadContext';
 import { LibraryProvider } from './contexts/LibraryContext';
@@ -14,15 +14,19 @@ import DownloadsView from './views/DownloadsView';
 import SettingsView from './views/SettingsViewEnhanced';
 import './App.css';
 
-const AppContent: React.FC = () => {
+const AppContent: React.FC<{ onThemeChange?: (theme: any) => void }> = ({ onThemeChange }) => {
   const { settings, loading } = useSettings();
   const [showFirstRun, setShowFirstRun] = useState(false);
 
   useEffect(() => {
     if (!loading && settings) {
       setShowFirstRun(!settings.first_run_complete);
+      // Update theme whenever settings change
+      const newTheme = generateTheme(settings.accent_color, settings.glassmorphism_intensity);
+      console.log('[App] Theme updated:', { accent: settings.accent_color, intensity: settings.glassmorphism_intensity });
+      onThemeChange?.(newTheme);
     }
-  }, [settings, loading]);
+  }, [settings, loading, onThemeChange]);
 
   useEffect(() => {
     // Listen for catalog updates
@@ -70,13 +74,15 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  const [outerTheme, setOuterTheme] = useState(generateTheme());
+
   return (
-    <ConfigProvider theme={steamTheme}>
+    <ConfigProvider theme={outerTheme}>
       <Router>
         <SettingsProvider>
           <DownloadProvider>
             <LibraryProvider>
-              <AppContent />
+              <AppContent onThemeChange={setOuterTheme} />
             </LibraryProvider>
           </DownloadProvider>
         </SettingsProvider>

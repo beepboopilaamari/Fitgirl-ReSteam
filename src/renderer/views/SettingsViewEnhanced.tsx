@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Typography, Card, Form, Switch, InputNumber, Button, List, message, Tabs, Slider, Select } from 'antd';
+import { Typography, Card, Form, Switch, InputNumber, Button, List, message, Tabs, Select } from 'antd';
 import { FolderAddOutlined, DeleteOutlined, BgColorsOutlined, DownloadOutlined, AppstoreOutlined, BellOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { useSettings } from '../contexts/SettingsContext';
 
@@ -41,12 +41,14 @@ const SettingsViewEnhanced: React.FC = () => {
   const handleSaveTheme = async (values: any) => {
     setLoading(true);
     try {
+      console.log('[SettingsView] Saving theme:', values);
       await updateSettings({
-        accent_color: values.accentColor,
-        glassmorphism_intensity: values.glassIntensity
+        accent_color: values.accentColor
       });
-      message.success('Theme settings saved - restart to apply');
+      console.log('[SettingsView] Theme settings saved successfully');
+      message.success('Theme settings updated');
     } catch (error) {
+      console.error('[SettingsView] Failed to save theme:', error);
       message.error('Failed to save theme settings');
     } finally {
       setLoading(false);
@@ -180,8 +182,7 @@ const SettingsViewEnhanced: React.FC = () => {
             layout="vertical"
             className="settings-form"
             initialValues={{
-              accentColor: settings.accent_color || '#6ddcff',
-              glassIntensity: settings.glassmorphism_intensity || 100
+              accentColor: settings.accent_color || '#6ddcff'
             }}
             onFinish={handleSaveTheme}
           >
@@ -190,13 +191,6 @@ const SettingsViewEnhanced: React.FC = () => {
               label={<span className="settings-label">Accent Color</span>}
             >
               <input type="color" style={{ width: 100, height: 40, border: '1px solid #1e293b', borderRadius: 8, cursor: 'pointer' }} />
-            </Form.Item>
-
-            <Form.Item 
-              name="glassIntensity" 
-              label={<span className="settings-label">Glassmorphism Intensity</span>}
-            >
-              <Slider min={50} max={150} marks={{ 50: 'Subtle', 100: 'Default', 150: 'Strong' }} />
             </Form.Item>
 
             <Form.Item>

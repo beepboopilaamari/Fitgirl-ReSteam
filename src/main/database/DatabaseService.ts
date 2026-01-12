@@ -764,7 +764,7 @@ export class DatabaseService {
   }
 
   updateSettings(settings: Partial<AppSettings>): void {
-    const settingsMap: Array<[keyof AppSettings, any]> = [
+    const settingsMap: Array<[string, any]> = [
       ['install_directories', settings.install_directories !== undefined ? JSON.stringify(settings.install_directories) : undefined],
       ['default_install_directory', settings.default_install_directory],
       ['seed_by_default', settings.seed_by_default !== undefined ? String(settings.seed_by_default) : undefined],
@@ -790,7 +790,7 @@ export class DatabaseService {
 
     for (const [key, value] of settingsMap) {
       if (value !== undefined) {
-        this.setSetting(key, value || '');
+        this.setSetting(key, value);
       }
     }
   }

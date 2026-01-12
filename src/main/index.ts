@@ -34,6 +34,7 @@ function createSplashWindow(): BrowserWindow {
     frame: false,
     alwaysOnTop: true,
     center: true,
+    icon: path.join(__dirname, '../../resources/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true
@@ -106,6 +107,7 @@ function createMainWindow(): BrowserWindow {
     show: false,
     frame: false,
     titleBarStyle: 'hidden',
+    icon: path.join(__dirname, '../../resources/icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -568,7 +570,21 @@ function setupIpcHandlers(): void {
 
   // ==================== DOWNLOADS ====================
   
-  ipcMain.handle('start-download', async (_, gameId: number) => {
+  ipcMain.handle('get-torrent-files', async (_, magnetLink: string) => {
+    try {
+      return await torrentManager.getTorrentFiles(magnetLink);
+    } catch (error) {
+      log.error('[Main] Error getting torrent files:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('start-download', async (_, gameId: number, selectedFileIndices?: number[]) => {
+    log.info('[Main] start-download called', {
+      gameId,
+      selectedFileIndices: selectedFileIndices ?? null,
+      indicesCount: selectedFileIndices ? selectedFileIndices.length : 0
+    });
     const game = db.getGameById(gameId);
     if (!game || !game.magnet_link) {
       throw new Error('Game or magnet link not found');
@@ -607,7 +623,8 @@ function setupIpcHandlers(): void {
       magnetLink: game.magnet_link,
       gameName: game.title,
       downloadPath,
-      seedAfterComplete: settings.seed_by_default
+      seedAfterComplete: settings.seed_by_default,
+      selectedFileIndices
     });
     
     log.info(`[Main] ✓ Added to torrent queue with ID: ${downloadId}`);

@@ -42,7 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPlaytimeStats: (installationId: number, period?: 'day' | 'week' | 'month') => ipcRenderer.invoke('get-playtime-stats', installationId, period),
 
   // Downloads
-  startDownload: (gameId: number) => ipcRenderer.invoke('start-download', gameId),
+  // Downloads
+  startDownload: (gameId: number, selectedFileIndices?: number[]) => ipcRenderer.invoke('start-download', gameId, selectedFileIndices),
+  getTorrentFiles: (magnetLink: string) => ipcRenderer.invoke('get-torrent-files', magnetLink),
   pauseDownload: (downloadId: number) => ipcRenderer.invoke('pause-download', downloadId),
   resumeDownload: (downloadId: number) => ipcRenderer.invoke('resume-download', downloadId),
   cancelDownload: (downloadId: number) => ipcRenderer.invoke('cancel-download', downloadId),
@@ -140,7 +142,8 @@ declare global {
       addLaunchOption: (option: Omit<LaunchOption, 'id'>) => Promise<number>;
       setDefaultLaunchOption: (installationId: number, optionId: number) => Promise<boolean>;
       deleteLaunchOption: (id: number) => Promise<boolean>;
-      startDownload: (gameId: number) => Promise<number>;
+      getTorrentFiles: (magnetLink: string) => Promise<any[]>;
+      startDownload: (gameId: number, selectedFileIndices?: number[]) => Promise<number>;
       pauseDownload: (downloadId: number) => Promise<boolean>;
       resumeDownload: (downloadId: number) => Promise<boolean>;
       cancelDownload: (downloadId: number) => Promise<boolean>;
