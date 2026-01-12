@@ -7,6 +7,9 @@ export interface Game {
   version: string;
   original_size_mb: number;
   repack_size_mb: number;
+  repack_size_text: string;
+  repack_size_min_mb: number;
+  repack_size_max_mb: number | null;
   magnet_link: string;
   page_url: string;
   cover_image_url: string | null;
@@ -14,6 +17,7 @@ export interface Game {
   genres: string[];
   companies: string;
   languages: string;
+  repack_date: string;
   date_added: string;
   last_scraped: string;
 }

@@ -8,6 +8,9 @@ export interface ScrapedGame {
   version: string;
   original_size_mb: number;
   repack_size_mb: number;
+  repack_size_text: string;
+  repack_size_min_mb: number;
+  repack_size_max_mb: number | null;
   magnet_link: string;
   page_url: string;
   cover_image_url: string | null;
@@ -15,6 +18,7 @@ export interface ScrapedGame {
   genres: string[];
   companies: string;
   languages: string;
+  repack_date: string;
   date_added: string;
 }
 
@@ -107,43 +111,75 @@ export class GameScraper {
       const urlParts = url.split('/').filter(p => p);
       const slug = urlParts[urlParts.length - 1] || this.slugify(title);
 
+      // Extract repack date from <time datetime="">
+      let repackDate = '';
+      const timeElem = root.querySelector('time.entry-date[datetime]');
+      if (timeElem) {
+        const datetime = timeElem.getAttribute('datetime');
+        if (datetime) {
+          repackDate = datetime;
+        }
+      }
+
       // Get article content
       const contentElem = root.querySelector('.entry-content');
 
-      // Extract genres
+      // Extract genres from footer tag-links
       const genres: string[] = [];
-      if (contentElem) {
-        const genreLinks = contentElem.querySelectorAll('a[rel="tag"]');
+      const footerMeta = root.querySelector('footer.entry-meta .tag-links');
+      if (footerMeta) {
+        const genreLinks = footerMeta.querySelectorAll('a[rel="tag"]');
         genreLinks.forEach(link => {
           const genre = link.text.trim();
           if (genre && !genres.includes(genre)) genres.push(genre);
         });
       }
 
-      // Extract metadata - search in all content
+      // Fallback: try content area for tags
+      if (genres.length === 0 && contentElem) {
+        const genreText = contentElem.text;
+        const genreMatch = genreText.match(/Genres?\/Tags?:\s*([^\n]+)/i);
+        if (genreMatch) {
+          const genreLinks = contentElem.querySelectorAll('a[href*="/tag/"]');
+          genreLinks.forEach(link => {
+            const genre = link.text.trim();
+            if (genre && !genres.includes(genre)) genres.push(genre);
+          });
+        }
+      }
+
+      // Extract metadata from content
       let companies = '';
       let languages = '';
       let originalSize = '';
-      let repackSize = '';
+      let repackSizeText = '';
 
       if (contentElem) {
         const fullText = contentElem.text;
         
-        // Extract companies
+        // Extract companies (handle <strong> tags)
         const companyMatch = fullText.match(/Compan(?:y|ies):\s*([^\n]+)/i);
-        if (companyMatch) companies = companyMatch[1].trim();
+        if (companyMatch) {
+          companies = companyMatch[1].trim().replace(/\s+/g, ' ');
+        }
         
         // Extract languages
         const langMatch = fullText.match(/Languages?:\s*([^\n]+)/i);
-        if (langMatch) languages = langMatch[1].trim();
+        if (langMatch) {
+          languages = langMatch[1].trim();
+        }
         
         // Extract original size
-        const origSizeMatch = fullText.match(/Original Size:\s*([\d.]+\s*[GMT]B)/i);
-        if (origSizeMatch) originalSize = origSizeMatch[1].trim();
+        const origSizeMatch = fullText.match(/Original Size:\s*([^\n]+)/i);
+        if (origSizeMatch) {
+          originalSize = origSizeMatch[1].trim();
+        }
         
-        // Extract repack size
-        const repackSizeMatch = fullText.match(/Repack Size:\s*([\d.]+\s*[GMT]B)/i);
-        if (repackSizeMatch) repackSize = repackSizeMatch[1].trim();
+        // Extract repack size (improved regex for all formats)
+        const repackSizeMatch = fullText.match(/Repack Size:\s*([^\n]+)/i);
+        if (repackSizeMatch) {
+          repackSizeText = repackSizeMatch[1].trim();
+        }
       }
 
       // Extract magnet link
@@ -161,7 +197,7 @@ export class GameScraper {
       // Try og:image first
       const metaImg = root.querySelector('meta[property="og:image"]');
       let imgSrc = metaImg?.getAttribute('content');
-      if (imgSrc && (imgSrc.includes('riotpixels.com') || imgSrc.startsWith('http'))) {
+      if (imgSrc && (imgSrc.includes('riotpixels.com') || imgSrc.includes('imageban.ru') || imgSrc.startsWith('http'))) {
         coverImage = imgSrc;
       }
       
@@ -169,7 +205,7 @@ export class GameScraper {
       if (!coverImage && contentElem) {
         const firstImg = contentElem.querySelector('img');
         imgSrc = firstImg?.getAttribute('src');
-        if (imgSrc && (imgSrc.includes('riotpixels.com') || imgSrc.startsWith('http'))) {
+        if (imgSrc && (imgSrc.includes('riotpixels.com') || imgSrc.includes('imageban.ru') || imgSrc.startsWith('http'))) {
           coverImage = imgSrc;
         }
       }
@@ -181,16 +217,19 @@ export class GameScraper {
         description = firstP?.text?.trim().slice(0, 500) || '';
       }
 
-      // Parse sizes to MB
+      // Parse sizes
       const originalSizeMb = this.parseSizeToMb(originalSize);
-      const repackSizeMb = this.parseSizeToMb(repackSize);
+      const { min, max, text } = this.parseRepackSize(repackSizeText);
 
       const game: ScrapedGame = {
         title: title.replace(/\s*\([^)]*\)\s*$/, '').trim(),
         slug,
         version,
         original_size_mb: originalSizeMb,
-        repack_size_mb: repackSizeMb,
+        repack_size_mb: min, // Keep for backwards compatibility
+        repack_size_text: text,
+        repack_size_min_mb: min,
+        repack_size_max_mb: max,
         magnet_link: magnetLink,
         page_url: url,
         cover_image_url: coverImage,
@@ -198,10 +237,11 @@ export class GameScraper {
         genres: genres.length > 0 ? genres : ['Unknown'],
         companies,
         languages,
+        repack_date: repackDate || new Date().toISOString(),
         date_added: new Date().toISOString()
       };
 
-      log.info(`[Scraper] Successfully scraped: ${game.title}`);
+      log.info(`[Scraper] Successfully scraped: ${game.title} (${game.repack_date})`);
       return game;
     } catch (error) {
       log.error(`[Scraper] Error scraping game page ${url}:`, error);
@@ -416,5 +456,41 @@ export class GameScraper {
       default:
         return 0;
     }
+  }
+
+  /**
+   * Parse repack size string to handle all formats:
+   * - "2.2 GB" → min: 2252, max: 2252, text: "2.2 GB"
+   * - "24/24.4 GB" → min: 24576, max: 24985, text: "24/24.4 GB"
+   * - "from 60 GB" → min: 61440, max: null, text: "from 60 GB"
+   */
+  private parseRepackSize(sizeStr: string): { min: number; max: number | null; text: string } {
+    if (!sizeStr) return { min: 0, max: 0, text: '' };
+
+    const text = sizeStr.trim();
+
+    // Case 1: "from X GB" (selective download)
+    const fromMatch = text.match(/from\s+([\d.]+)\s*(GB|MB|TB)/i);
+    if (fromMatch) {
+      const min = this.parseSizeToMb(`${fromMatch[1]} ${fromMatch[2]}`);
+      return { min, max: null, text };
+    }
+
+    // Case 2: "X/Y GB" (multiple sizes)
+    const rangeMatch = text.match(/([\d.]+)\/([\d.]+)\s*(GB|MB|TB)/i);
+    if (rangeMatch) {
+      const min = this.parseSizeToMb(`${rangeMatch[1]} ${rangeMatch[3]}`);
+      const max = this.parseSizeToMb(`${rangeMatch[2]} ${rangeMatch[3]}`);
+      return { min, max, text };
+    }
+
+    // Case 3: Single size "X GB"
+    const singleMatch = text.match(/([\d.]+)\s*(GB|MB|TB)/i);
+    if (singleMatch) {
+      const size = this.parseSizeToMb(`${singleMatch[1]} ${singleMatch[2]}`);
+      return { min: size, max: size, text };
+    }
+
+    return { min: 0, max: 0, text };
   }
 }

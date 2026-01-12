@@ -231,8 +231,8 @@ export class DatabaseService {
   
   insertGame(game: Omit<Game, 'id'>): number {
     const stmt = this.db.prepare(`
-      INSERT INTO games (title, slug, version, original_size_mb, repack_size_mb, magnet_link, page_url, cover_image_url, description, genres, companies, languages, date_added, last_scraped)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO games (title, slug, version, original_size_mb, repack_size_mb, repack_size_text, repack_size_min_mb, repack_size_max_mb, magnet_link, page_url, cover_image_url, description, genres, companies, languages, repack_date, date_added, last_scraped)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     const result = stmt.run(
@@ -241,6 +241,9 @@ export class DatabaseService {
       game.version,
       game.original_size_mb,
       game.repack_size_mb,
+      game.repack_size_text,
+      game.repack_size_min_mb,
+      game.repack_size_max_mb,
       game.magnet_link,
       game.page_url,
       game.cover_image_url,
@@ -248,11 +251,18 @@ export class DatabaseService {
       JSON.stringify(game.genres),
       game.companies,
       game.languages,
+      game.repack_date,
       game.date_added,
       game.last_scraped
     );
     
     return result.lastInsertRowid as number;
+  }
+
+  clearAllGames(): void {
+    const stmt = this.db.prepare('DELETE FROM games');
+    stmt.run();
+    console.log('[Database] Cleared all games for recache');
   }
 
   // ==================== SCRAPER PROGRESS ====================
@@ -300,7 +310,7 @@ export class DatabaseService {
   }
 
   getAllGames(limit?: number, offset?: number): Game[] {
-    let query = 'SELECT * FROM games ORDER BY date_added ASC';
+    let query = 'SELECT * FROM games ORDER BY repack_date DESC';
     if (limit) {
       query += ` LIMIT ${limit}`;
       if (offset) {

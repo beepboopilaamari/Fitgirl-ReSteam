@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS games (
   version TEXT,
   original_size_mb INTEGER,
   repack_size_mb INTEGER,
+  repack_size_text TEXT,
+  repack_size_min_mb INTEGER,
+  repack_size_max_mb INTEGER,
   magnet_link TEXT,
   page_url TEXT UNIQUE NOT NULL,
   cover_image_url TEXT,
@@ -13,6 +16,7 @@ CREATE TABLE IF NOT EXISTS games (
   genres TEXT, -- JSON array
   companies TEXT,
   languages TEXT,
+  repack_date TEXT,
   date_added TEXT DEFAULT CURRENT_TIMESTAMP,
   last_scraped TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -20,6 +24,8 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE INDEX IF NOT EXISTS idx_games_title ON games(title);
 CREATE INDEX IF NOT EXISTS idx_games_slug ON games(slug);
 CREATE INDEX IF NOT EXISTS idx_games_date_added ON games(date_added);
+CREATE INDEX IF NOT EXISTS idx_games_repack_date ON games(repack_date);
+CREATE INDEX IF NOT EXISTS idx_games_repack_size_min ON games(repack_size_min_mb);
 
 -- Installed games
 CREATE TABLE IF NOT EXISTS installations (
