@@ -337,12 +337,21 @@ export class GameScraper {
       return newGames;
     }
     
-    // If we've already done a full scrape, just check recent pages
-    log.info(`[Scraper] Quick update - checking first 3 pages for new games (existing slugs: ${existingSlugs.length})`);
+    // If we've already done a full scrape, check pages until no new games found
+    log.info(`[Scraper] Quick update - checking pages for new games (existing slugs: ${existingSlugs.length})`);
     
-    for (let page = 1; page <= 3; page++) {
+    let page = 1;
+    let consecutivePagesWithNoNewGames = 0;
+    const MAX_EMPTY_PAGES = 2; // Stop after 2 consecutive pages with no new games
+    
+    while (consecutivePagesWithNoNewGames < MAX_EMPTY_PAGES) {
       const urls = await this.scrapeListingPage(page);
       log.info(`[Scraper] Page ${page}: found ${urls.length} URLs total`);
+      
+      if (urls.length === 0) {
+        log.warn(`[Scraper] No URLs found on page ${page}, stopping`);
+        break;
+      }
       
       // Filter out games we already have
       const newUrls = urls.filter(u => {
@@ -355,22 +364,23 @@ export class GameScraper {
 
       if (newUrls.length === 0) {
         log.info(`[Scraper] No new games found on page ${page}`);
-        continue;
-      }
-
-      const games = await this.scrapeGamePages(newUrls);
-      for (const game of games) {
-        newGames.push(game);
-        slugSet.add(game.slug);
+        consecutivePagesWithNoNewGames++;
+      } else {
+        consecutivePagesWithNoNewGames = 0; // Reset counter
+        
+        const games = await this.scrapeGamePages(newUrls);
+        for (const game of games) {
+          newGames.push(game);
+          slugSet.add(game.slug);
+        }
       }
 
       // Rate limiting
-      if (page < 3) {
-        await this.sleep(this.delay);
-      }
+      await this.sleep(this.delay);
+      page++;
     }
 
-    log.info(`[Scraper] Quick update complete: found ${newGames.length} new games`);
+    log.info(`[Scraper] Quick update complete: checked ${page - 1} pages, found ${newGames.length} new games`);
     return newGames;
   }
 
