@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+*.log
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+Thumbs.db
+.env
+resources/games.db
+downloads/
+cache/
