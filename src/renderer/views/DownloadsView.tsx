@@ -34,13 +34,25 @@ const DownloadsView: React.FC = () => {
 
   const handleClearAll = async () => {
     Modal.confirm({
-      title: 'Clear All Downloads?',
-      content: 'This will remove all downloads from the list and cancel any active downloads. Your cached games will not be affected.',
+      title: <span style={{ fontSize: '16px', fontWeight: 600 }}>Clear All Downloads?</span>,
+      content: (
+        <div style={{ fontSize: '14px', lineHeight: '1.8', marginTop: '12px' }}>
+          <p style={{ margin: '0 0 8px 0' }}>
+            This will remove all downloads from the list and cancel any active downloads.
+          </p>
+          <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>
+            Your cached games will not be affected.
+          </p>
+        </div>
+      ),
       okText: 'Clear All',
       okType: 'danger',
       cancelText: 'Cancel',
       centered: true,
-      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
+      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: '24px', marginTop: '4px' }} />,
+      width: 500,
+      okButtonProps: { size: 'large' },
+      cancelButtonProps: { size: 'large' },
       onOk: async () => {
         try {
           await window.electronAPI.clearAllDownloads();
@@ -213,11 +225,12 @@ const DownloadsView: React.FC = () => {
     }
   };
 
-  const activeList = activeDownloads.filter(d => 
-    [DownloadStatus.DOWNLOADING, DownloadStatus.PAUSED, DownloadStatus.QUEUED, DownloadStatus.SEEDING].includes(d.status as DownloadStatus)
-  );
+  const activeList = activeDownloads;
 
   const completedList = downloads.filter(d => d.status === DownloadStatus.COMPLETED);
+
+  console.log('[DownloadsView] activeDownloads:', activeDownloads.map(d => `ID:${d.id} Status:${d.status}`));
+  console.log('[DownloadsView] activeList:', activeList.map(d => `ID:${d.id} Status:${d.status}`));
 
   return (
     <div className="page-shell">
@@ -255,32 +268,33 @@ const DownloadsView: React.FC = () => {
                       )}
                     </Paragraph>
                   </div>
-                  <Space>
-                    {download.status === DownloadStatus.DOWNLOADING && (
+                  <Space style={{ gap: 8 }}>
+                    {download.status === DownloadStatus.PAUSED ? (
+                      <Button icon={<PlayCircleOutlined />} onClick={() => handleResume(download.id)}>
+                        Resume
+                      </Button>
+                    ) : (
                       <Button icon={<PauseOutlined />} onClick={() => handlePause(download.id)}>
                         Pause
                       </Button>
                     )}
-                    {download.status === DownloadStatus.PAUSED && (
-                      <Button icon={<PlayCircleOutlined />} onClick={() => handleResume(download.id)}>
-                        Resume
-                      </Button>
-                    )}
-                    <Tooltip title="Increase Priority">
-                      <Button 
-                        size="small" 
-                        icon={<ArrowUpOutlined />} 
-                        onClick={() => handleIncreasePriority(download.id, download.priority || 0)}
-                      />
-                    </Tooltip>
-                    <Tooltip title="Decrease Priority">
-                      <Button 
-                        size="small" 
-                        icon={<ArrowDownOutlined />} 
-                        onClick={() => handleDecreasePriority(download.id, download.priority || 0)}
-                        disabled={!download.priority || download.priority <= 0}
-                      />
-                    </Tooltip>
+                    <Space.Compact>
+                      <Tooltip title="Increase Priority">
+                        <Button 
+                          size="small" 
+                          icon={<ArrowUpOutlined />} 
+                          onClick={() => handleIncreasePriority(download.id, download.priority || 0)}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Decrease Priority">
+                        <Button 
+                          size="small" 
+                          icon={<ArrowDownOutlined />} 
+                          onClick={() => handleDecreasePriority(download.id, download.priority || 0)}
+                          disabled={!download.priority || download.priority <= 0}
+                        />
+                      </Tooltip>
+                    </Space.Compact>
                     <Button icon={<DeleteOutlined />} 
                       onClick={() => handleCancel(download.id)}
                       loading={cancellingDownload === download.id}

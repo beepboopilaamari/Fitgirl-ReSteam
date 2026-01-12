@@ -1,6 +1,6 @@
 {
   "name": "fitgirl-resteam",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Steam-like game library manager for FitGirl Repacks with built-in torrent client",
   "main": "dist/main/index.js",
   "author": "FitGirl Resteam",
