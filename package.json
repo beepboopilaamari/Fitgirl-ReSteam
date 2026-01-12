@@ -70,8 +70,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "your-github-username",
-        "repo": "fitgirl-resteam"
+        "owner": "beepboopilaamari",
+        "repo": "Fitgirl-ReSteam"
       }
     ],
     "win": {
