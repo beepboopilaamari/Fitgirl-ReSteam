@@ -106,6 +106,9 @@ export interface AppSettings {
   notify_on_update_available?: boolean;
   // Storage
   auto_cleanup_temp_files?: boolean;
+  // AI Recommendations
+  gemini_api_key?: string;
+  enable_ai_recommendations?: boolean;
 }
 
 export interface ProgressUpdate {

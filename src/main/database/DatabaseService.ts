@@ -87,7 +87,13 @@ export class DatabaseService {
       
       // Download enhancements
       `ALTER TABLE downloads ADD COLUMN date_completed TEXT`,
-      `ALTER TABLE downloads ADD COLUMN priority INTEGER DEFAULT 0`
+      `ALTER TABLE downloads ADD COLUMN priority INTEGER DEFAULT 0`,
+      
+      // Game catalog enhancements (v1.2.0)
+      `ALTER TABLE games ADD COLUMN repack_date TEXT`,
+      `ALTER TABLE games ADD COLUMN repack_size_text TEXT`,
+      `ALTER TABLE games ADD COLUMN repack_size_min_mb INTEGER`,
+      `ALTER TABLE games ADD COLUMN repack_size_max_mb INTEGER`
     ];
     
     for (const migration of migrations) {
@@ -98,6 +104,16 @@ export class DatabaseService {
           console.error('[DatabaseService] Migration error:', error.message);
         }
       }
+    }
+    
+    // Add indexes for new columns
+    try {
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_games_repack_date ON games(repack_date);
+        CREATE INDEX IF NOT EXISTS idx_games_repack_size_min ON games(repack_size_min_mb);
+      `);
+    } catch (error: any) {
+      console.error('[DatabaseService] Index creation error:', error.message);
     }
   }
   
@@ -309,8 +325,15 @@ export class DatabaseService {
     return row ? this.parseGame(row) : null;
   }
 
-  getAllGames(limit?: number, offset?: number): Game[] {
-    let query = 'SELECT * FROM games ORDER BY repack_date DESC';
+  getAllGames(limit?: number, offset?: number, sortBy?: string, sortOrder?: 'asc' | 'desc'): Game[] {
+    // Default sort by release date descending (newest first)
+    const validSortFields = ['repack_date', 'title', 'repack_size_min_mb', 'date_added'];
+    const sortField = sortBy && validSortFields.includes(sortBy) ? sortBy : 'repack_date';
+    const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+    
+    // Handle null dates by treating them as oldest
+    let query = `SELECT * FROM games ORDER BY ${sortField} IS NULL, ${sortField} ${order}`;
+    
     if (limit) {
       query += ` LIMIT ${limit}`;
       if (offset) {
@@ -769,7 +792,11 @@ export class DatabaseService {
       notify_on_download_complete: this.getSetting('notify_on_download_complete') !== 'false',
       notify_on_update_available: this.getSetting('notify_on_update_available') !== 'false',
       // Storage
-      auto_cleanup_temp_files: this.getSetting('auto_cleanup_temp_files') === 'true'
+      auto_cleanup_temp_files: this.getSetting('auto_cleanup_temp_files') === 'true',
+      // AI Recommendations
+      gemini_api_key: this.getSetting('gemini_api_key') || '',
+      // Default OFF unless explicitly enabled
+      enable_ai_recommendations: this.getSetting('enable_ai_recommendations') === 'true'
     };
   }
 
@@ -795,7 +822,9 @@ export class DatabaseService {
       ['notifications_enabled', settings.notifications_enabled !== undefined ? String(settings.notifications_enabled) : undefined],
       ['notify_on_download_complete', settings.notify_on_download_complete !== undefined ? String(settings.notify_on_download_complete) : undefined],
       ['notify_on_update_available', settings.notify_on_update_available !== undefined ? String(settings.notify_on_update_available) : undefined],
-      ['auto_cleanup_temp_files', settings.auto_cleanup_temp_files !== undefined ? String(settings.auto_cleanup_temp_files) : undefined]
+      ['auto_cleanup_temp_files', settings.auto_cleanup_temp_files !== undefined ? String(settings.auto_cleanup_temp_files) : undefined],
+      ['gemini_api_key', settings.gemini_api_key],
+      ['enable_ai_recommendations', settings.enable_ai_recommendations !== undefined ? String(settings.enable_ai_recommendations) : undefined]
     ];
 
     for (const [key, value] of settingsMap) {

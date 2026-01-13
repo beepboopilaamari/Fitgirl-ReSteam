@@ -24,16 +24,11 @@ export interface ScrapedGame {
 
 export class GameScraper {
   private baseUrl = 'https://fitgirl-repacks.site';
-  private delay = 10; // 10ms between requests
-  private readonly CONCURRENT_GAME_PAGES = 5; // Scrape 5 game pages concurrently
 
   constructor() {
     log.info('[Scraper] GameScraper initialized');
   }
 
-  private async sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 
   private slugify(text: string): string {
     return text
@@ -250,33 +245,23 @@ export class GameScraper {
   }
 
   /**
-   * Scrape multiple game pages concurrently (up to CONCURRENT_GAME_PAGES at a time)
+   * Scrape multiple game pages - ALL AT ONCE!
    */
   async scrapeGamePages(urls: string[]): Promise<ScrapedGame[]> {
-    log.info(`[Scraper] Scraping ${urls.length} game pages (concurrent limit: ${this.CONCURRENT_GAME_PAGES})`);
+    log.info(`[Scraper] Scraping ${urls.length} game pages (NO LIMITS - ALL AT ONCE)`);
     const games: ScrapedGame[] = [];
     
-    // Process URLs in batches to avoid hammering the server
-    for (let i = 0; i < urls.length; i += this.CONCURRENT_GAME_PAGES) {
-      const batch = urls.slice(i, i + this.CONCURRENT_GAME_PAGES);
-      
-      // Fetch all URLs in this batch concurrently
-      const batchGames = await Promise.all(
-        batch.map(url => this.scrapeGamePage(url))
-      );
-      
-      // Add successfully scraped games to results
-      batchGames.forEach(game => {
-        if (game) {
-          games.push(game);
-        }
-      });
-      
-      // Wait before next batch (only if there are more batches)
-      if (i + this.CONCURRENT_GAME_PAGES < urls.length) {
-        await this.sleep(this.delay * 2); // Small delay between batches
+    // Fetch ALL URLs at once - no batching!
+    const allGames = await Promise.all(
+      urls.map(url => this.scrapeGamePage(url))
+    );
+    
+    // Add successfully scraped games to results
+    allGames.forEach(game => {
+      if (game) {
+        games.push(game);
       }
-    }
+    });
     
     return games;
   }
@@ -298,11 +283,6 @@ export class GameScraper {
       
       const games = await this.scrapeGamePages(urls);
       allGames.push(...games);
-      
-      // Rate limiting between pages
-      if (page < endPage) {
-        await this.sleep(this.delay);
-      }
     }
     
     log.info(`[Scraper] Scraped ${allGames.length} games total`);
@@ -318,6 +298,7 @@ export class GameScraper {
     const newGames: ScrapedGame[] = [];
     const slugSet = new Set(existingSlugs);
     const MAX_PAGE = 705; // Last page on fitgirl-repacks.site
+    const PAGES_PER_BATCH = 10; // Fetch 10 pages at once!
     
     // If we haven't scraped all pages yet, continue full scrape
     if (lastScrapedPage < MAX_PAGE) {
@@ -326,51 +307,58 @@ export class GameScraper {
       let currentPage = lastScrapedPage + 1;
       
       while (currentPage <= MAX_PAGE) {
-        log.info(`[Scraper] Scraping page ${currentPage} of ${MAX_PAGE}...`);
+        log.info(`[Scraper] Scraping pages ${currentPage} to ${Math.min(currentPage + PAGES_PER_BATCH - 1, MAX_PAGE)} of ${MAX_PAGE}...`);
         
-        const urls = await this.scrapeListingPage(currentPage);
+        // Fetch multiple pages in parallel!
+        const pagePromises = [];
+        const pagesToFetch = Math.min(PAGES_PER_BATCH, MAX_PAGE - currentPage + 1);
         
-        if (urls.length === 0) {
-          log.warn(`[Scraper] No games found on page ${currentPage}, skipping`);
+        for (let i = 0; i < pagesToFetch; i++) {
+          pagePromises.push(this.scrapeListingPage(currentPage + i));
+        }
+        
+        const pagesResults = await Promise.all(pagePromises);
+        
+        // Process all pages from this batch
+        for (let i = 0; i < pagesResults.length; i++) {
+          const urls = pagesResults[i];
+          const pageNum = currentPage + i;
           
-          // Notify progress even if empty
+          if (urls.length === 0) {
+            log.warn(`[Scraper] No games found on page ${pageNum}, skipping`);
+            
+            if (onPageScraped) {
+              onPageScraped(pageNum, 0);
+            }
+            
+            continue;
+          }
+          
+          // Filter out games we already have
+          const newUrls = urls.filter(u => {
+            const parts = u.split('/').filter(p => p);
+            const slug = parts[parts.length - 1];
+            return !slugSet.has(slug);
+          });
+          
+          if (newUrls.length === 0) {
+            log.info(`[Scraper] Page ${pageNum}: All ${urls.length} games already in database`);
+          } else {
+            log.info(`[Scraper] Page ${pageNum}: Found ${newUrls.length} new games out of ${urls.length} total`);
+            
+            const games = await this.scrapeGamePages(newUrls);
+            for (const game of games) {
+              newGames.push(game);
+              slugSet.add(game.slug);
+            }
+          }
+          
           if (onPageScraped) {
-            onPageScraped(currentPage, 0);
-          }
-          
-          currentPage++;
-          await this.sleep(this.delay);
-          continue;
-        }
-        
-        // Filter out games we already have
-        const newUrls = urls.filter(u => {
-          const parts = u.split('/').filter(p => p);
-          const slug = parts[parts.length - 1];
-          return !slugSet.has(slug);
-        });
-        
-        if (newUrls.length === 0) {
-          log.info(`[Scraper] Page ${currentPage}: All ${urls.length} games already in database`);
-        } else {
-          log.info(`[Scraper] Page ${currentPage}: Found ${newUrls.length} new games out of ${urls.length} total`);
-          
-          const games = await this.scrapeGamePages(newUrls);
-          for (const game of games) {
-            newGames.push(game);
-            slugSet.add(game.slug);
+            onPageScraped(pageNum, newUrls.length);
           }
         }
-        
-        // Notify progress
-        if (onPageScraped) {
-          onPageScraped(currentPage, newUrls.length);
-        }
-        
-        currentPage++;
-        
-        // Rate limiting
-        await this.sleep(this.delay);
+
+        currentPage += pagesToFetch;
       }
       
       log.info(`[Scraper] Full scrape complete. Scraped up to page ${currentPage - 1}, found ${newGames.length} new games`);
@@ -383,41 +371,59 @@ export class GameScraper {
     let page = 1;
     let consecutivePagesWithNoNewGames = 0;
     const MAX_EMPTY_PAGES = 2; // Stop after 2 consecutive pages with no new games
+    const QUICK_PAGES_PER_BATCH = 5; // Fetch 5 pages at once for quick updates
+    const MAX_QUICK_PAGES = 10; // Never check more than 10 pages in quick mode
     
-    while (consecutivePagesWithNoNewGames < MAX_EMPTY_PAGES) {
-      const urls = await this.scrapeListingPage(page);
-      log.info(`[Scraper] Page ${page}: found ${urls.length} URLs total`);
+    while (consecutivePagesWithNoNewGames < MAX_EMPTY_PAGES && page <= MAX_QUICK_PAGES) {
+      log.info(`[Scraper] Quick update: fetching pages ${page} to ${page + QUICK_PAGES_PER_BATCH - 1}...`);
       
-      if (urls.length === 0) {
-        log.warn(`[Scraper] No URLs found on page ${page}, stopping`);
-        break;
+      // Fetch multiple pages in parallel!
+      const pagePromises = [];
+      for (let i = 0; i < QUICK_PAGES_PER_BATCH; i++) {
+        pagePromises.push(this.scrapeListingPage(page + i));
       }
       
-      // Filter out games we already have
-      const newUrls = urls.filter(u => {
-        const parts = u.split('/').filter(p => p);
-        const slug = parts[parts.length - 1];
-        return !slugSet.has(slug);
-      });
-
-      log.info(`[Scraper] Page ${page}: ${newUrls.length} new URLs after filtering`);
-
-      if (newUrls.length === 0) {
-        log.info(`[Scraper] No new games found on page ${page}`);
-        consecutivePagesWithNoNewGames++;
-      } else {
-        consecutivePagesWithNoNewGames = 0; // Reset counter
+      const pagesResults = await Promise.all(pagePromises);
+      
+      // Process all pages from this batch
+      for (let i = 0; i < pagesResults.length; i++) {
+        const urls = pagesResults[i];
+        const pageNum = page + i;
         
-        const games = await this.scrapeGamePages(newUrls);
-        for (const game of games) {
-          newGames.push(game);
-          slugSet.add(game.slug);
+        log.info(`[Scraper] Page ${pageNum}: found ${urls.length} URLs total`);
+        
+        if (urls.length === 0) {
+          log.warn(`[Scraper] No URLs found on page ${pageNum}`);
+          consecutivePagesWithNoNewGames++;
+          if (consecutivePagesWithNoNewGames >= MAX_EMPTY_PAGES) break;
+          continue;
+        }
+        
+        // Filter out games we already have
+        const newUrls = urls.filter(u => {
+          const parts = u.split('/').filter(p => p);
+          const slug = parts[parts.length - 1];
+          return !slugSet.has(slug);
+        });
+
+        log.info(`[Scraper] Page ${pageNum}: ${newUrls.length} new URLs after filtering`);
+
+        if (newUrls.length === 0) {
+          log.info(`[Scraper] No new games found on page ${pageNum}`);
+          consecutivePagesWithNoNewGames++;
+          if (consecutivePagesWithNoNewGames >= MAX_EMPTY_PAGES) break;
+        } else {
+          consecutivePagesWithNoNewGames = 0; // Reset counter
+          
+          const games = await this.scrapeGamePages(newUrls);
+          for (const game of games) {
+            newGames.push(game);
+            slugSet.add(game.slug);
+          }
         }
       }
 
-      // Rate limiting
-      await this.sleep(this.delay);
-      page++;
+      page += QUICK_PAGES_PER_BATCH;
     }
 
     log.info(`[Scraper] Quick update complete: checked ${page - 1} pages, found ${newGames.length} new games`);
@@ -462,6 +468,7 @@ export class GameScraper {
    * Parse repack size string to handle all formats:
    * - "2.2 GB" → min: 2252, max: 2252, text: "2.2 GB"
    * - "24/24.4 GB" → min: 24576, max: 24985, text: "24/24.4 GB"
+   * - "5~6.6 GB" → min: 5120, max: 6758, text: "5~6.6 GB"
    * - "from 60 GB" → min: 61440, max: null, text: "from 60 GB"
    */
   private parseRepackSize(sizeStr: string): { min: number; max: number | null; text: string } {
@@ -476,8 +483,8 @@ export class GameScraper {
       return { min, max: null, text };
     }
 
-    // Case 2: "X/Y GB" (multiple sizes)
-    const rangeMatch = text.match(/([\d.]+)\/([\d.]+)\s*(GB|MB|TB)/i);
+    // Case 2: "X/Y GB" or "X~Y GB" (range with / or ~ separator)
+    const rangeMatch = text.match(/([\d.]+)[/~]([\d.]+)\s*(GB|MB|TB)/i);
     if (rangeMatch) {
       const min = this.parseSizeToMb(`${rangeMatch[1]} ${rangeMatch[3]}`);
       const max = this.parseSizeToMb(`${rangeMatch[2]} ${rangeMatch[3]}`);

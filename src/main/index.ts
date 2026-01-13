@@ -7,6 +7,7 @@ import { DatabaseService } from './database/DatabaseService';
 import { GameScraper } from './scraper/GameScraper';
 import { TorrentManager } from './torrent/TorrentManager';
 import { GameLauncher } from './launcher/GameLauncher';
+import { GeminiRecommendationService } from './ai/GeminiRecommendationService';
 import { 
   Installation, 
   LaunchOption, 
@@ -25,6 +26,7 @@ let db: DatabaseService;
 let scraper: GameScraper;
 let torrentManager: TorrentManager;
 let gameLauncher: GameLauncher;
+let geminiService: GeminiRecommendationService;
 
 function createSplashWindow(): BrowserWindow {
   const splash = new BrowserWindow({
@@ -148,6 +150,10 @@ async function initializeServices(): Promise<void> {
   
   // Initialize game launcher
   gameLauncher = new GameLauncher();
+
+  // Initialize Gemini AI service
+  const settings = db.getSettings();
+  geminiService = new GeminiRecommendationService(settings.gemini_api_key);
 
   // Setup event listeners
   setupTorrentEvents();
@@ -315,6 +321,7 @@ async function updateCatalog(): Promise<number> {
 
     // Check for new games with progress tracking
     let currentMaxPage = lastPage;
+    let totalNewGames = 0;
     const newGames = await scraper.updateCatalog(
       lastUpdate, 
       existingSlugs, 
@@ -322,6 +329,7 @@ async function updateCatalog(): Promise<number> {
       (page: number, newGamesCount: number) => {
         // Update progress after each page
         currentMaxPage = Math.max(currentMaxPage, page);
+        totalNewGames += newGamesCount;
         db.setScraperProgress(currentMaxPage);
         log.info(`[Main] Progress: page ${page} complete (${newGamesCount} new games), saved progress`);
         
@@ -330,7 +338,7 @@ async function updateCatalog(): Promise<number> {
           mainWindow.webContents.send('scraper-progress', { 
             page, 
             newGamesCount,
-            totalNewGames: newGames.length 
+            totalNewGames 
           });
         }
       }
@@ -406,14 +414,19 @@ function setupIpcHandlers(): void {
     if (settings.upload_speed_limit_mbps !== undefined) {
       torrentManager.setUploadSpeedLimit(settings.upload_speed_limit_mbps);
     }
+
+    // Update Gemini API key if changed
+    if (settings.gemini_api_key !== undefined) {
+      geminiService.setApiKey(settings.gemini_api_key);
+    }
     
     return db.getSettings();
   });
 
   // ==================== GAMES ====================
   
-  ipcMain.handle('get-games', async (_, limit?: number, offset?: number) => {
-    return db.getAllGames(limit, offset);
+  ipcMain.handle('get-games', async (_, limit?: number, offset?: number, sortBy?: string, sortOrder?: 'asc' | 'desc') => {
+    return db.getAllGames(limit, offset, sortBy, sortOrder);
   });
 
   ipcMain.handle('get-game', async (_, id: number) => {
@@ -426,6 +439,55 @@ function setupIpcHandlers(): void {
 
   ipcMain.handle('get-games-count', async () => {
     return db.getGamesCount();
+  });
+
+  // ==================== AI RECOMMENDATIONS ====================
+
+  ipcMain.handle('get-ai-recommendations', async (_, maxRecommendations: number = 10) => {
+    try {
+      const settings = db.getSettings();
+      
+      if (!settings.gemini_api_key || !settings.enable_ai_recommendations) {
+        return { success: false, error: 'AI recommendations not enabled or configured' };
+      }
+
+      // Get library games (installations)
+      const installations = db.getAllInstallations();
+      if (installations.length === 0) {
+        return { success: false, error: 'No games in library to base recommendations on' };
+      }
+
+      // Get library game IDs
+      const libraryGameIds = installations.map(i => i.game_id);
+      
+      // Get full game objects for library
+      const libraryGames = libraryGameIds
+        .map(id => db.getGameById(id))
+        .filter(g => g !== null);
+
+      // Get all cached games (limit to 500 for performance)
+      const allGames = db.getAllGames(500);
+
+      // Filter out games already in library
+      const availableGames = allGames.filter(g => !libraryGameIds.includes(g.id));
+
+      if (availableGames.length === 0) {
+        return { success: false, error: 'No games available for recommendations' };
+      }
+
+      // Get AI recommendations
+      const recommendations = await geminiService.getRecommendations(
+        libraryGames,
+        availableGames,
+        maxRecommendations
+      );
+
+      return { success: true, recommendations };
+    } catch (error) {
+      log.error('[AI] Failed to get recommendations:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get AI recommendations';
+      return { success: false, error: errorMessage };
+    }
   });
 
   // ==================== INSTALLATIONS ====================
@@ -966,6 +1028,14 @@ function setupIpcHandlers(): void {
     return await updateCatalog();
   });
 
+  ipcMain.handle('recache-all', async () => {
+    log.info('[Main] Starting full recache - clearing database');
+    db.clearAllGames();
+    db.setScraperProgress(0);
+    log.info('[Main] Database cleared, starting full scrape');
+    return await updateCatalog();
+  });
+
   // ==================== APP UPDATES ====================
   
   ipcMain.handle('check-for-updates', async () => {
@@ -1023,7 +1093,7 @@ app.whenReady().then(async () => {
     // Show splash screen while updating catalog
     splashWindow = createSplashWindow();
     
-    // Update catalog in background
+    // Update FitGirl catalog in background
     const newGamesCount = await updateCatalog();
     
     // Create main window

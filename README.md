@@ -14,6 +14,7 @@ A Steam-like game library manager for FitGirl Repacks with built-in torrent clie
 - ⚙️ **Multiple Launch Options** - Support for different game executables (x86/x64, etc.)
 - 📈 **Playtime Tracking** - Automatically track how long you play each game
 - 🔍 **Search & Filter** - Find games by name, genre, size
+- 🤖 **AI Recommendations** - Optional Gemini-powered suggestions (user-provided API key)
 
 ## Technology Stack
 
@@ -73,6 +74,35 @@ npm run package
 \`\`\`
 
 The installer will be in the `release/` directory.
+
+## AI Recommendations (Optional)
+
+You can enable AI-powered recommendations using Google Gemini. This is optional and requires your own API key.
+
+### Enable AI in the App
+
+1. Open the app and go to **Settings → AI Recommendations**
+2. Toggle **Enable AI Recommendations** ON
+3. Paste your **Gemini API Key** and click **Save Settings**
+
+Notes:
+- Your key is stored locally in your app data and masked in the UI.
+- AI features will remain disabled until you provide a valid key.
+- We do not ship any API keys in the app or repo.
+
+### Get a Gemini API Key
+
+1. Go to Google AI Studio: https://aistudio.google.com/
+2. Create an API key (free tier is sufficient)
+3. Copy the key and paste it into the app settings
+
+### What AI Can Do
+
+- Analyze your library and suggest similar games
+- Show trending picks (latest releases)
+- Quick downloads by size (e.g., under 20GB)
+- Fresh releases from the last few months
+- Random suggestion that fits your catalog
 
 ## Auto-Updates
 

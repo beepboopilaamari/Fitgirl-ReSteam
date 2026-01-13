@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Typography, Card, Form, Switch, InputNumber, Button, List, message } from 'antd';
-import { FolderAddOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Typography, Card, Form, Switch, InputNumber, Button, List, message, Input } from 'antd';
+import { FolderAddOutlined, DeleteOutlined, RobotOutlined } from '@ant-design/icons';
 import { useSettings } from '../contexts/SettingsContext';
 
 const { Title } = Typography;
@@ -36,15 +36,25 @@ const SettingsView: React.FC = () => {
     });
   };
 
+  const MASK = '••••••••••••••••';
+
   const handleSave = async (values: any) => {
     setLoading(true);
     try {
-      await updateSettings({
+      const updates: any = {
         seed_by_default: values.seedByDefault,
         download_speed_limit_mbps: values.downloadLimit,
         upload_speed_limit_mbps: values.uploadLimit,
-        check_updates_on_startup: values.checkUpdates
-      });
+        check_updates_on_startup: values.checkUpdates,
+        enable_ai_recommendations: values.enableAI
+      };
+
+      // Only save API key if user entered a real value (not the mask)
+      if (values.geminiApiKey && values.geminiApiKey !== MASK) {
+        updates.gemini_api_key = values.geminiApiKey.trim();
+      }
+
+      await updateSettings(updates);
       message.success('Settings saved');
     } catch (error) {
       message.error('Failed to save settings');
@@ -157,6 +167,49 @@ const SettingsView: React.FC = () => {
             valuePropName="checked"
           >
             <Switch />
+          </Form.Item>
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading} className="settings-save-btn">
+              Save Settings
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+
+      <Card title={
+          <div className="settings-card-title">
+            <RobotOutlined style={{ marginRight: '8px' }} />
+            AI Recommendations
+          </div>
+        } className="glass-card glass-settings-card" bordered={false}>
+        <Form
+          layout="vertical"
+          className="settings-form"
+          initialValues={{
+            enableAI: settings.enable_ai_recommendations || false,
+            geminiApiKey: settings.gemini_api_key ? '••••••••••••••••' : ''
+          }}
+          onFinish={handleSave}
+        >
+          <Form.Item 
+            name="enableAI" 
+            label={<span className="settings-label">Enable AI Recommendations</span>}
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+
+          <Form.Item 
+            name="geminiApiKey" 
+            label={<span className="settings-label">Gemini API Key</span>}
+            help="Get your free API key from Google AI Studio"
+          >
+            <Input.Password 
+              placeholder="Paste your API key here..." 
+              className="settings-input"
+              style={{ fontFamily: 'monospace' }}
+            />
           </Form.Item>
 
           <Form.Item>

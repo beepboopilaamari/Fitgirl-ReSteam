@@ -9,10 +9,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateSettings: (settings: Partial<AppSettings>) => ipcRenderer.invoke('update-settings', settings),
 
   // Games
-  getGames: (limit?: number, offset?: number) => ipcRenderer.invoke('get-games', limit, offset),
+  getGames: (limit?: number, offset?: number, sortBy?: string, sortOrder?: 'asc' | 'desc') => ipcRenderer.invoke('get-games', limit, offset, sortBy, sortOrder),
   getGame: (id: number) => ipcRenderer.invoke('get-game', id),
   searchGames: (searchTerm: string, filters?: any) => ipcRenderer.invoke('search-games', searchTerm, filters),
   getGamesCount: () => ipcRenderer.invoke('get-games-count'),
+
+  // AI Recommendations
+  getAIRecommendations: (maxRecommendations?: number) => ipcRenderer.invoke('get-ai-recommendations', maxRecommendations),
 
   // Installations
   getInstallations: () => ipcRenderer.invoke('get-installations'),
@@ -67,6 +70,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Catalog
   updateCatalog: () => ipcRenderer.invoke('update-catalog'),
+  recacheAll: () => ipcRenderer.invoke('recache-all'),
 
   // App Updates
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -128,7 +132,7 @@ declare global {
     electronAPI: {
       getSettings: () => Promise<AppSettings>;
       updateSettings: (settings: Partial<AppSettings>) => Promise<AppSettings>;
-      getGames: (limit?: number, offset?: number) => Promise<Game[]>;
+      getGames: (limit?: number, offset?: number, sortBy?: string, sortOrder?: 'asc' | 'desc') => Promise<Game[]>;
       getGame: (id: number) => Promise<Game | null>;
       searchGames: (searchTerm: string, filters?: any) => Promise<Game[]>;
       getGamesCount: () => Promise<number>;
@@ -161,6 +165,7 @@ declare global {
       openFolder: (folderPath: string) => Promise<void>;
       runInstaller: (installerPath: string) => Promise<{ success: boolean; exitCode: number }>;
       updateCatalog: () => Promise<number>;
+      recacheAll: () => Promise<number>;
       checkForUpdates: () => Promise<any>;
       installUpdate: () => void;
       onUpdateAvailable: (callback: (data: any) => void) => void;
@@ -176,6 +181,7 @@ declare global {
       getCollectionGames: (collectionId: number) => Promise<any[]>;
       getPlaytimeSessions: (installationId: number) => Promise<any[]>;
       getPlaytimeStats: (installationId: number, period?: 'day' | 'week' | 'month') => Promise<any>;
+      getAIRecommendations: (maxRecommendations?: number) => Promise<{ success: boolean; recommendations?: any[]; error?: string }>;
       onDownloadStarted: (callback: (data: any) => void) => void;
       onDownloadProgress: (callback: (data: any) => void) => void;
       onDownloadCompleted: (callback: (data: any) => void) => void;

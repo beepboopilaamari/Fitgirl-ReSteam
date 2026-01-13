@@ -31,7 +31,8 @@ module.exports = {
     'electron': 'commonjs electron',
     'electron-log': 'commonjs electron-log',
     'electron-store': 'commonjs electron-store',
-
+    'cheerio': 'commonjs cheerio',
+    'axios': 'commonjs axios',
     'node-html-parser': 'commonjs node-html-parser',
     'sanitize-html': 'commonjs sanitize-html'
   }

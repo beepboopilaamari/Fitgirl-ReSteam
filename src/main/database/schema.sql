@@ -27,6 +27,28 @@ CREATE INDEX IF NOT EXISTS idx_games_date_added ON games(date_added);
 CREATE INDEX IF NOT EXISTS idx_games_repack_date ON games(repack_date);
 CREATE INDEX IF NOT EXISTS idx_games_repack_size_min ON games(repack_size_min_mb);
 
+-- Anker Games catalog (direct downloads)
+CREATE TABLE IF NOT EXISTS anker_games (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  version TEXT,
+  size_mb INTEGER,
+  size_text TEXT,
+  download_id INTEGER NOT NULL,
+  page_url TEXT UNIQUE NOT NULL,
+  cover_image_url TEXT,
+  description TEXT,
+  genres TEXT, -- JSON array
+  release_year TEXT,
+  date_added TEXT DEFAULT CURRENT_TIMESTAMP,
+  last_scraped TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_anker_games_title ON anker_games(title);
+CREATE INDEX IF NOT EXISTS idx_anker_games_slug ON anker_games(slug);
+CREATE INDEX IF NOT EXISTS idx_anker_games_date_added ON anker_games(date_added);
+
 -- Installed games
 CREATE TABLE IF NOT EXISTS installations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
